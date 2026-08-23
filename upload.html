@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>समरस मध्यप्रदेश — अधिकृत मीडिया अपलोड</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+body{font-family:Arial,"Noto Sans Devanagari",sans-serif;background:#f7f7f4;color:#182018;margin:0}
+header{background:#0f4c35;color:#fff;padding:16px;text-align:center}
+main{max-width:620px;margin:auto;padding:16px}
+.card{background:#fff;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #0001}
+h1{font-size:20px;margin:0} h2{font-size:18px}
+label{display:block;font-weight:700;margin:12px 0 6px}
+input,textarea{width:100%;box-sizing:border-box;padding:13px;border:1px solid #ccd8cf;border-radius:10px;font-size:15px}
+button{width:100%;padding:14px;border:0;border-radius:10px;background:#0f4c35;color:#fff;font-size:16px;font-weight:700;margin-top:12px}
+button:disabled{opacity:.5}
+.badge{background:#e8f5ee;border-radius:10px;padding:12px;margin:10px 0}
+.small{font-size:12px;color:#667}
+#app{display:none}.error{color:#a22;background:#fff0f0;padding:10px;border-radius:8px}
+.progress{height:12px;background:#ddd;border-radius:10px;overflow:hidden;margin-top:12px}.bar{height:100%;width:0;background:#0f4c35}
+</style>
+</head>
+<body>
+<header><h1>समरस मध्यप्रदेश</h1><div>अधिकृत यात्रा मीडिया अपलोड</div></header>
+<main>
+<div class="card">
+<h2>1. अधिकृत Google खाते से प्रवेश</h2>
+<p class="small">केवल संगठन द्वारा पंजीकृत और सक्रिय uploader ही सामग्री भेज सकते हैं।</p>
+<div id="g_id_onload"
+ data-client_id="YOUR_GOOGLE_CLIENT_ID"
+ data-callback="handleGoogleCredential"
+ data-auto_prompt="false"></div>
+<div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline"></div>
+<div id="loginStatus" class="small">Login की प्रतीक्षा...</div>
+</div>
+
+<div id="app">
+<div class="card">
+<h2>2. आपका अधिकृत क्षेत्र</h2>
+<div id="profile" class="badge"></div>
+</div>
+
+<div class="card">
+<h2>3. कार्यक्रम</h2>
+<label>कार्यक्रम / यात्रा</label><input id="event" placeholder="समरसता यात्रा">
+<label>स्थान</label><input id="location" placeholder="गाँव / वार्ड / बस्ती">
+<label>तारीख</label><input id="eventDate" type="date">
+<label>विवरण</label><textarea id="description" rows="3"></textarea>
+<label>फोटो / वीडियो</label>
+<input id="file" type="file" accept="image/*,video/*">
+<div id="fileInfo" class="small"></div>
+<div class="progress"><div id="bar" class="bar"></div></div>
+<button id="send" onclick="startUpload()">सामग्री भेजें</button>
+<div id="msg"></div>
+</div>
+</div>
+</main>
+<script>
+const CONFIG={
+ workerUrl:"YOUR_WORKER_URL",
+ googleClientId:"YOUR_GOOGLE_CLIENT_ID",
+ partSize:10*1024*1024
+};
+let googleToken="", profile=null;
+document.getElementById("eventDate").value=new Date().toISOString().slice(0,10);
+function handleGoogleCredential(r){
+ googleToken=r.credential; loadProfile();
+}
+async function loadProfile(){
+ const res=await fetch(CONFIG.workerUrl+"/profile",{headers:{Authorization:"Bearer "+googleToken}});
+ const d=await res.json();
+ if(!res.ok){document.getElementById("loginStatus").innerHTML='<span class="error">'+(d.error||"अधिकृत नहीं")+"</span>";return}
+ profile=d;
+ document.getElementById("loginStatus").textContent="✓ अधिकृत Google account";
+ document.getElementById("app").style.display="block";
+ document.getElementById("profile").innerHTML=
+  "<b>"+esc(d.profile.name)+"</b><br>"+esc(d.identity.email)+
+  "<br>"+esc(d.profile.district)+" → "+esc(d.profile.assembly)+" → "+
+  esc(d.profile.mandal)+" → "+esc(d.profile.ward)+" → "+esc(d.profile.area)+
+  "<br><b>सीमा: "+d.policy.maxFileSizeMB+" MB / file</b> · दैनिक "+d.policy.dailyQuotaMB+" MB";
+}
+document.getElementById("file").addEventListener("change",()=>{
+ const f=document.getElementById("file").files[0];
+ if(f) document.getElementById("fileInfo").textContent=f.name+" — "+fmt(f.size);
+});
+async function startUpload(){
+ const f=document.getElementById("file").files[0];
+ if(!googleToken||!profile){return msg("पहले अधिकृत Google login करें",true)}
+ if(!f)return msg("फोटो या वीडियो चुनें",true);
+ const max=profile.policy.maxFileSizeMB*1024*1024;
+ if(f.size>max)return msg("आपके क्षेत्र की सीमा "+profile.policy.maxFileSizeMB+" MB है",true);
+ if(!f.type.startsWith("image/")&&!f.type.startsWith("video/"))return msg("केवल फोटो/वीडियो स्वीकार हैं",true);
+ const btn=document.getElementById("send");btn.disabled=true;
+ try{
+  const meta={filename:f.name,fileType:f.type,fileSize:f.size,event:v("event"),location:v("location"),eventDate:v("eventDate"),description:v("description")};
+  const cr=await api("/mpu/create","POST",meta); if(!cr.ok) throw new Error(cr.data.error||"Upload शुरू नहीं हुआ");
+  const parts=[]; const count=Math.ceil(f.size/CONFIG.partSize);
+  for(let i=0;i<count;i++){
+   const start=i*CONFIG.partSize,end=Math.min(start+CONFIG.partSize,f.size);
+   const chunk=f.slice(start,end);
+   setProgress(Math.round(i/count*90),"भाग "+(i+1)+" / "+count);
+   const r=await fetch(CONFIG.workerUrl+"/mpu/part?uploadId="+encodeURIComponent(cr.data.uploadId)+"&partNumber="+(i+1),{
+    method:"PUT",headers:{Authorization:"Bearer "+googleToken},body:chunk
+   });
+   const d=await r.json();if(!r.ok)throw new Error(d.error||"Part upload failed");
+   parts.push({partNumber:d.partNumber,etag:d.etag});
+  }
+  setProgress(95,"अंतिम रूप दिया जा रहा है…");
+  const done=await api("/mpu/complete?uploadId="+encodeURIComponent(cr.data.uploadId),"POST",{parts});
+  if(!done.ok)throw new Error(done.data.error||"Complete failed");
+  setProgress(100,"सफल — Pending Review");
+  msg("सामग्री प्राप्त हुई। Upload ID: "+cr.data.uploadId,false);
+ }catch(e){msg(e.message||"Upload में त्रुटि",true)}
+ finally{btn.disabled=false}
+}
+async function api(path,method,body){
+ const r=await fetch(CONFIG.workerUrl+path,{method,headers:{Authorization:"Bearer "+googleToken,"Content-Type":"application/json"},body:JSON.stringify(body)});
+ return {ok:r.ok,data:await r.json()};
+}
+function v(id){return document.getElementById(id).value.trim()}
+function msg(t,err){document.getElementById("msg").innerHTML='<div class="'+(err?"error":"badge")+'">'+esc(t)+'</div>'}
+function setProgress(p,t){document.getElementById("bar").style.width=p+"%";document.getElementById("fileInfo").textContent=t}
+function fmt(n){return n<1048576?(n/1024).toFixed(1)+" KB":(n/1048576).toFixed(1)+" MB"}
+function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+</script>
+</body>
+</html>

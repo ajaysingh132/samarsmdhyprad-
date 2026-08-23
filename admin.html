@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="hi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>समरस मध्यप्रदेश — Uploader Registry</title>
+<style>body{font-family:Arial,sans-serif;background:#f5f5f2;padding:16px}.card{max-width:650px;margin:auto;background:white;padding:20px;border-radius:14px}input,select{width:100%;box-sizing:border-box;padding:11px;margin:5px 0 10px}button{width:100%;padding:13px;background:#0f4c35;color:white;border:0;border-radius:8px;font-weight:bold}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}</style>
+<div class="card"><h2>समरस मध्यप्रदेश — Authorized Uploader</h2>
+<label>Worker URL</label><input id="worker" placeholder="https://...workers.dev">
+<label>Admin Secret</label><input id="secret" type="password">
+<div class="grid">
+<div><label>Google Email</label><input id="email"></div><div><label>नाम</label><input id="name"></div>
+<div><label>मोबाइल</label><input id="mobile"></div><div><label>जिला</label><input id="district"></div>
+<div><label>विधानसभा</label><input id="assembly"></div><div><label>मंडल</label><input id="mandal"></div>
+<div><label>वार्ड</label><input id="ward"></div><div><label>बस्ती/क्षेत्र</label><input id="area"></div>
+<div><label>भूमिका</label><input id="role" value="कार्यकर्ता"></div>
+<div><label>अधिकतम फाइल</label><select id="max"><option>100</option><option>200</option><option>300</option><option>400</option><option>500</option></select></div>
+<div><label>Daily quota MB</label><input id="quota" type="number" value="500"></div>
+<div><label>Files/day</label><input id="count" type="number" value="5"></div>
+</div>
+<button onclick="save()">Uploader को Active करें</button><p id="msg"></p></div>
+<script>
+async function save(){
+ const worker=document.getElementById("worker").value.replace(/\/$/,"");
+ const secret=document.getElementById("secret").value;
+ const b={email:v("email"),name:v("name"),mobile:v("mobile"),district:v("district"),assembly:v("assembly"),mandal:v("mandal"),ward:v("ward"),area:v("area"),role:v("role"),maxFileSizeMB:+v("max"),dailyQuotaMB:+v("quota"),dailyFileLimit:+v("count"),status:"active"};
+ const r=await fetch(worker+"/admin/uploader",{method:"POST",headers:{"Authorization":"Bearer "+secret,"Content-Type":"application/json"},body:JSON.stringify(b)});
+ const d=await r.json();document.getElementById("msg").textContent=r.ok?"✓ Uploader registered":"❌ "+(d.error||"Error");
+}
+function v(id){return document.getElementById(id).value.trim()}
+</script>
